@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalkulator Manual Dana Darurat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 p-4 md:p-8 font-sans text-gray-800 flex items-center justify-center min-h-screen">
+    <div class="max-w-4xl w-full bg-white p-6 md:p-10 rounded-2xl shadow-xl border border-gray-200">
+        <h1 class="text-2xl md:text-3xl font-bold text-center text-slate-800 mb-2">Kalkulator Manual Dana Darurat</h1>
+        <p class="text-center text-slate-500 mb-8 font-medium">Ketik nominal secara manual</p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-8">
+            <!-- Controls -->
+            <div class="space-y-6">
+                <!-- Target Dana -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Target Dana Darurat (Rp)</label>
+                    <input type="number" id="target_amount" value="30000000" class="w-full border-gray-300 border px-4 py-2 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-slate-700 font-semibold" oninput="updateSimulation()">
+                    <p id="targetFormatted" class="text-xs text-blue-600 mt-1 font-medium">Rp 30.000.000</p>
+                </div>
+                
+                <!-- Tabungan Bulanan -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Kapasitas Nabung Bulanan (Rp)</label>
+                    <input type="number" id="monthly_savings" value="1500000" class="w-full border-gray-300 border px-4 py-2 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-slate-700 font-semibold" oninput="updateSimulation()">
+                    <p id="savingsFormatted" class="text-xs text-blue-600 mt-1 font-medium">Rp 1.500.000</p>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-2 gap-4 mt-8">
+                    <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-xl border border-blue-100 text-center shadow-sm">
+                        <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Waktu Capai</p>
+                        <p class="text-3xl font-extrabold text-blue-700"><span id="timeToReach">0</span> <span class="text-sm font-semibold text-blue-500">Bulan</span></p>
+                        <p id="timeInYears" class="text-xs text-indigo-500 mt-1 font-medium">(0 Tahun)</p>
+                    </div>
+                    <div class="bg-gradient-to-br from-emerald-50 to-teal-50 p-5 rounded-xl border border-emerald-100 text-center shadow-sm flex flex-col justify-center">
+                        <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Tabungan Setahun</p>
+                        <p id="annualAccumulated" class="text-xl md:text-2xl font-extrabold text-emerald-700">Rp 0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="relative h-72 md:h-80 w-full border border-slate-100 rounded-xl p-4 bg-slate-50 shadow-inner flex flex-col">
+                <canvas id="simulationChart"></canvas>
+            </div>
+        </div>
+
+        <div class="mt-6 text-center text-xs md:text-sm text-slate-500 border-t pt-6">
+            ⚠️ Simulasi linier tanpa bunga. Gunakan instrumen berisiko rendah yang tidak fluktuatif seperti kripto.
+        </div>
+    </div>
+
+    <script>
+        const formatRupiah = (num) => {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
+        };
+
+        const targetInput = document.getElementById('target_amount');
+        const savingsInput = document.getElementById('monthly_savings');
+        
+        const targetFormatted = document.getElementById('targetFormatted');
+        const savingsFormatted = document.getElementById('savingsFormatted');
+        
+        const timeToReach = document.getElementById('timeToReach');
+        const timeInYears = document.getElementById('timeInYears');
+        const annualAccumulated = document.getElementById('annualAccumulated');
+        
+        const ctx = document.getElementById('simulationChart').getContext('2d');
+        let chart;
+
+        function updateSimulation() {
+            let target = parseFloat(targetInput.value);
+            let monthly = parseFloat(savingsInput.value);
+
+            // Validasi jika dikosongkan
+            if (isNaN(target) || target <= 0) target = 1;
+            if (isNaN(monthly) || monthly <= 0) monthly = 1;
+
+            targetFormatted.innerText = formatRupiah(target);
+            savingsFormatted.innerText = formatRupiah(monthly);
+
+            // Kalkulasi waktu (Bulan dan Tahun)
+            const monthsNeeded = Math.ceil(target / monthly);
+            const yearsNeeded = (monthsNeeded / 12).toFixed(1);
+            const annualSavings = monthly * 12;
+
+            timeToReach.innerText = monthsNeeded;
+            timeInYears.innerText = "(" + yearsNeeded + " Tahun)";
+            annualAccumulated.innerText = formatRupiah(annualSavings);
+
+            // Data untuk Chart
+            const labels = [];
+            const dataAccumulated = [];
+            const dataTarget = [];
+            
+            // Batasi sumbu X agar grafik tidak terlalu panjang/penuh jika tabungannya kecil
+            const maxYearsDisplay = Math.min(Math.ceil(yearsNeeded), 10);
+            
+            // Mulai dari Tahun ke-0
+            labels.push('Thn 0');
+            dataAccumulated.push(0);
+            dataTarget.push(target);
+
+            for (let i = 1; i <= maxYearsDisplay; i++) {
+                labels.push('Thn ' + i);
+                dataAccumulated.push(annualSavings * i);
+                dataTarget.push(target);
+            }
+            
+            // Tambahkan titik selesai jika nilainya bukan tahun bulat
+            if (yearsNeeded != Math.floor(yearsNeeded) && yearsNeeded <= 10) {
+                 labels.push(yearsNeeded + ' Thn');
+                 dataAccumulated.push(target);
+                 dataTarget.push(target);
+            }
+
+            if (chart) {
+                chart.destroy();
+            }
+
+            // Gambar Chart
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Akumulasi Tabungan',
+                            data: dataAccumulated,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.1,
+                            pointBackgroundColor: '#fff',
+                            pointBorderColor: '#3b82f6',
+                            pointBorderWidth: 2,
+                            pointRadius: 4,
+                        },
+                        {
+                            label: 'Target Dana',
+                            data: dataTarget,
+                            borderColor: '#ef4444',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0,
+                            pointHoverRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: '#e2e8f0',
+                                drawBorder: false,
+                            },
+                            ticks: {
+                                color: '#64748b',
+                                font: { size: 10 },
+                                callback: function(value) {
+                                    if(value >= 1000000) {
+                                        return 'Rp ' + (value/1000000) + 'Jt';
+                                    }
+                                    return 'Rp ' + (value/1000) + 'k';
+                                }
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false,
+                                drawBorder: false,
+                            },
+                            ticks: {
+                                color: '#64748b',
+                                font: { size: 11 }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 10,
+                                font: { size: 11, weight: 'bold' }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleFont: { size: 12 },
+                            bodyFont: { size: 13, weight: 'bold' },
+                            padding: 10,
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + formatRupiah(context.raw);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Render awal
+        updateSimulation();
+    </script>
+</body>
+</html>
